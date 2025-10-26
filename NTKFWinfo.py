@@ -322,32 +322,27 @@ def get_args():
 
     return (in_file, is_extract, is_extract_offset, is_extract_all, is_replace, is_replace_offset, is_replace_file, is_uncompress, is_uncompress_offset, is_compress, fixCRC_partID)
 
-
-
 def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
     uiSum = 0
     pos = 0
-    chunk_size = 65536  # 64KB chunks - adjust as needed
+    chunk_size = 10 * 1024 * 1024  # 10MB chunks
     bytes_remaining = uiLen
     
     with open(input_file, 'rb') as fin:
         fin.seek(in_offset, 0)
         
         while bytes_remaining > 0:
-            # Read smaller chunk
             read_size = min(chunk_size, bytes_remaining)
-            # Ensure we read even number of bytes for 16-bit words
             read_size = (read_size // 2) * 2
             
             fread = fin.read(read_size)
             if not fread:
                 break
             
-            # Process this chunk
             num_words = len(fread) // 2
-            for chunk in struct.unpack("<%sH" % num_words, fread):
+            for chunk in struct.iter_unpack('<H', fread):
                 if pos * 2 != ignoreCRCoffset:
-                    uiSum += chunk + pos
+                    uiSum += chunk[0] + pos
                 else:
                     uiSum += pos
                 pos += 1
