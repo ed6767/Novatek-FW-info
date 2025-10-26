@@ -327,6 +327,7 @@ def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
     pos = 0
     chunk_size = 10 * 1024 * 1024  # 10MB chunks
     bytes_remaining = uiLen
+    bytes_processed = 0
     
     with open(input_file, 'rb') as fin:
         fin.seek(in_offset, 0)
@@ -347,7 +348,10 @@ def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
                     uiSum += pos
                 pos += 1
             
+            bytes_processed += len(fread)
             bytes_remaining -= len(fread)
+            progress_pct = (bytes_processed / uiLen) * 100
+            print(f"Progress: {progress_pct:.1f}% ({bytes_processed / 1024 / 1024:.1f}MB / {uiLen / 1024 / 1024:.1f}MB)")
     
     uiSum = uiSum & 0xFFFF
     uiSum = (~uiSum & 0xFFFF) + 1
