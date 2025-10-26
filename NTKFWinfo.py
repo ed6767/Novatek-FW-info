@@ -327,31 +327,51 @@ def get_args():
 def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
     uiSum = 0
     pos = 0
-    num_words = uiLen // 2
+    bytes_processed = 0
     
+    # Open file and seek to offset
     fin = open(input_file, 'rb')
     fin.seek(in_offset, 0)
-    fread = fin.read(uiLen)
+    
+    # Process file in small chunks (e.g., 4KB at a time)
+    chunk_size = 4096  # Adjust based on your needs
+    buffer = bytearray()
+    
+    while bytes_processed < uiLen:
+        # Read a small chunk
+        remaining = uiLen - bytes_processed
+        read_size = min(chunk_size, remaining)
+        data = fin.read(read_size)
+        
+        if not data:
+            break
+            
+        # Add to buffer and process complete 2-byte words
+        buffer.extend(data)
+        
+        # Process all complete 2-byte words in buffer
+        while len(buffer) >= 2:
+            # Unpack little endian 16-bit value
+            chunk = struct.unpack('<H', buffer[0:2])[0]
+            
+            # Calculate checksum
+            if bytes_processed != ignoreCRCoffset:
+                uiSum += chunk + pos
+            else:
+                uiSum += pos
+                
+            pos += 1
+            bytes_processed += 2
+            
+            # Remove processed bytes from buffer
+            buffer = buffer[2:]
+    
     fin.close()
     
-    #читаем по 2 байта в little endian
-    for chunk in struct.unpack("<%sH" % num_words, fread[0:num_words*2]):
-        if pos*2 != ignoreCRCoffset:
-            uiSum += chunk + pos
-        else:
-            uiSum += pos
-        pos+=1
-        #print('read=0x%04X' % chunk)
-        #print('pos=%i' % pos)
-        #print('or 0x%08X' % struct.unpack('>H', read)[0])
-        #print('CRC=0x%08X' % uiSum)
-        
-
-    #print('CRC=0x%08X' % uiSum)
+    # Apply final checksum calculations
     uiSum = uiSum & 0xFFFF
     uiSum = (~uiSum & 0xFFFF) + 1
-    #print('Final CRC=0x%08X' % uiSum)
-
+    
     return uiSum
 
 
