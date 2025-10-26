@@ -327,54 +327,37 @@ def get_args():
 def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
     uiSum = 0
     pos = 0
-    bytes_processed = 0
+    chunk_size = 65536  # 64KB chunks - adjust as needed
+    bytes_remaining = uiLen
     
-    # Open file and seek to offset
-    fin = open(input_file, 'rb')
-    fin.seek(in_offset, 0)
-    
-    # Process file in small chunks (e.g., 4KB at a time)
-    chunk_size = 4096  # Adjust based on your needs
-    buffer = bytearray()
-    
-    while bytes_processed < uiLen:
-        # Read a small chunk
-        remaining = uiLen - bytes_processed
-        read_size = min(chunk_size, remaining)
-        data = fin.read(read_size)
+    with open(input_file, 'rb') as fin:
+        fin.seek(in_offset, 0)
         
-        if not data:
-            break
+        while bytes_remaining > 0:
+            # Read smaller chunk
+            read_size = min(chunk_size, bytes_remaining)
+            # Ensure we read even number of bytes for 16-bit words
+            read_size = (read_size // 2) * 2
             
-        # Add to buffer and process complete 2-byte words
-        buffer.extend(data)
-        
-        # Process all complete 2-byte words in buffer
-        while len(buffer) >= 2:
-            # Unpack little endian 16-bit value
-            chunk = struct.unpack('<H', buffer[0:2])[0]
+            fread = fin.read(read_size)
+            if not fread:
+                break
             
-            # Calculate checksum
-            if bytes_processed != ignoreCRCoffset:
-                uiSum += chunk + pos
-            else:
-                uiSum += pos
-                
-            pos += 1
-            bytes_processed += 2
+            # Process this chunk
+            num_words = len(fread) // 2
+            for chunk in struct.unpack("<%sH" % num_words, fread):
+                if pos * 2 != ignoreCRCoffset:
+                    uiSum += chunk + pos
+                else:
+                    uiSum += pos
+                pos += 1
             
-            # Remove processed bytes from buffer
-            buffer = buffer[2:]
+            bytes_remaining -= len(fread)
     
-    fin.close()
-    
-    # Apply final checksum calculations
     uiSum = uiSum & 0xFFFF
     uiSum = (~uiSum & 0xFFFF) + 1
     
     return uiSum
-
-
 
 def compress_CKSM_UBI(part_nr, in2_file):
     global in_file, is_ARM64
