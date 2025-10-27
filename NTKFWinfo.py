@@ -55,6 +55,7 @@
 CURRENT_VERSION = '6.7'
 
 import os, struct, sys, argparse, array
+import numpy as np
 from datetime import datetime, timezone
 import zlib
 import lzma
@@ -324,42 +325,29 @@ def get_args():
 
 def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
     uiSum = 0
-    pos = 0
-    chunk_size = 10 * 1024 * 1024
-    bytes_remaining = uiLen
-    bytes_processed = 0
-    
-    with open(input_file, 'rb') as fin:
-        fin.seek(in_offset, 0)
-        
+    chunk_size = 1024 * 1024
+
+    with open(input_file, 'rb', buffering=0) as fin:
+        fin.seek(in_offset)
+
+        pos = 0
+        bytes_remaining = uiLen
         while bytes_remaining > 0:
             read_size = min(chunk_size, bytes_remaining)
-            read_size = (read_size // 2) * 2
-            
+            read_size &= ~1
             fread = fin.read(read_size)
             if not fread:
                 break
-            
-            # Zero-copy buffer, no unpacking overhead
-            words = array.array('H')
-            words.frombuffer(fread, len(fread) // 2)
-            
-            for word in words:
-                byte_pos = pos * 2
-                if byte_pos != ignoreCRCoffset:
-                    uiSum += word + pos
-                else:
-                    uiSum += pos
-                pos += 1
-            
-            bytes_processed += len(fread)
-            bytes_remaining -= len(fread)
-            progress_pct = (bytes_processed / uiLen) * 100
-            print(f"Progress: {progress_pct:.1f}%")
-    
-    uiSum = uiSum & 0xFFFF
+
+            arr = np.frombuffer(fread, dtype='<u2')
+            indices = np.arange(pos, pos + len(arr), dtype=np.uint32)
+            arr[indices * 2 == ignoreCRCoffset] = 0  # zero out ignored word
+            uiSum += int(np.sum(arr + indices) & 0xFFFF)
+            pos += len(arr)
+            bytes_remaining -= read_size
+
+    uiSum &= 0xFFFF
     uiSum = (~uiSum & 0xFFFF) + 1
-    
     return uiSum
 
 def compress_CKSM_UBI(part_nr, in2_file):
