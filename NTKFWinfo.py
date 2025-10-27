@@ -1225,24 +1225,31 @@ def uncompress(in_offset, out_filename, size):
         BCL1_uncompress(in_offset, out_filename)
         return
 
+    # UBI#
     if FourCC == b'UBI#':
         #create dir with similar name as for other parttition types
         os.system('sudo rm -rf ' + '\"' + out_filename + '\"')
         os.system('mkdir ' + '\"' + out_filename + '\"')
 
-        #extract UBI partition to tempfile
-        fin.seek(in_offset, 0)
-        finread = fin.read(size)
-        fin.close()
-        fpartout = open(out_filename + '/tempfile', 'w+b')
-        fpartout.write(finread)
-        fpartout.close()
-
+        # Use chunked reading instead of loading entire partition into memory
+        chunk_size = 1024 * 1024  # 1MB chunks - adjust based on your available memory
+        tempfile_path = out_filename + '/tempfile'
+        
+        with open(tempfile_path, 'w+b') as fpartout:
+            bytes_remaining = size
+            while bytes_remaining > 0:
+                read_size = min(chunk_size, bytes_remaining)
+                chunk = fin.read(read_size)
+                if not chunk:  # Handle EOF
+                    break
+                fpartout.write(chunk)
+                bytes_remaining -= read_size
+        
         #unpack UBIFS to created dir
-        os.system('sudo ubireader_extract_files -k -i -f ' + '-o ' + '\"' + out_filename + '\"' + ' ' + '\"' + out_filename + '/tempfile' + '\"')
+        os.system('sudo ubireader_extract_files -k -i -f ' + '-o ' + '\"' + out_filename + '\"' + ' ' + '\"' + tempfile_path + '\"')
 
         # delete tempfile
-        os.system('rm -rf ' + '\"' + out_filename + '/tempfile' + '\"')
+        os.system('rm -rf ' + '\"' + tempfile_path + '\"')
         return
 
     # SPARSE EXT4
