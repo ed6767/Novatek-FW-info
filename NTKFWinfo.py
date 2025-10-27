@@ -1201,7 +1201,6 @@ def uncompress(in_offset, out_filename, size):
     fin.seek(in_offset, 0)
     FourCC = fin.read(4)
 
-
     # FDT (DTB)
     if struct.unpack('>I', FourCC)[0] == 0xD00DFEED:
         #extract FDT partition to tempfile
@@ -1219,20 +1218,21 @@ def uncompress(in_offset, out_filename, size):
         os.system('rm -rf ' + '\"' + out_filename + '_tempfile' + '\"')
         return
 
-
     if FourCC == b'BCL1':
         fin.close()
         BCL1_uncompress(in_offset, out_filename)
         return
 
-    # UBI#
     if FourCC == b'UBI#':
         #create dir with similar name as for other parttition types
         os.system('sudo rm -rf ' + '\"' + out_filename + '\"')
         os.system('mkdir ' + '\"' + out_filename + '\"')
 
+        # IMPORTANT: Seek back to the start to include FourCC in the output
+        fin.seek(in_offset, 0)
+        
         # Use chunked reading instead of loading entire partition into memory
-        chunk_size = 1024 * 1024  # 1MB chunks - adjust based on your available memory
+        chunk_size = 1024 * 1024  # 1MB chunks
         tempfile_path = out_filename + '/tempfile'
         
         with open(tempfile_path, 'w+b') as fpartout:
@@ -1244,6 +1244,8 @@ def uncompress(in_offset, out_filename, size):
                     break
                 fpartout.write(chunk)
                 bytes_remaining -= read_size
+        
+        fin.close()
         
         #unpack UBIFS to created dir
         os.system('sudo ubireader_extract_files -k -i -f ' + '-o ' + '\"' + out_filename + '\"' + ' ' + '\"' + tempfile_path + '\"')
@@ -1259,22 +1261,33 @@ def uncompress(in_offset, out_filename, size):
         os.system('mkdir ' + '\"' + out_filename + '\"')
         os.system('mkdir ' + '\"' + out_filename + '/mount' + '\"') # subdir for mounting ext4
 
-        #extract SPARSE EXT4 partition to tempfile
+        # Seek back to the start
         fin.seek(in_offset, 0)
-        finread = fin.read(size)
+        
+        # Use chunked reading instead of loading entire partition into memory
+        chunk_size = 1024 * 1024  # 1MB chunks
+        tempfile_path = out_filename + '/tempfile'
+        
+        with open(tempfile_path, 'w+b') as fpartout:
+            bytes_remaining = size
+            while bytes_remaining > 0:
+                read_size = min(chunk_size, bytes_remaining)
+                chunk = fin.read(read_size)
+                if not chunk:  # Handle EOF
+                    break
+                fpartout.write(chunk)
+                bytes_remaining -= read_size
+        
         fin.close()
-        fpartout = open(out_filename + '/tempfile', 'w+b')
-        fpartout.write(finread)
-        fpartout.close()
 
         # convert SPARSE to ext4
-        subprocess.run('simg2img ' + '\"' + out_filename + '/tempfile' + '\"' + ' ' + '\"' + out_filename + '/tempfile.ext4' + '\"', shell=True)
+        subprocess.run('simg2img ' + '\"' + tempfile_path + '\"' + ' ' + '\"' + out_filename + '/tempfile.ext4' + '\"', shell=True)
 
         # mount ext4 to folder
         os.system('mount ' + '\"' + out_filename + '/tempfile.ext4' + '\"' + ' ' + '\"' + out_filename + '/mount' + '\"')
 
         # удалим tempfile, tempfile.ext4 нам еще нужен будет для сборки обратно
-        os.system('rm -rf ' + '\"' + out_filename + '/tempfile' + '\"')
+        os.system('rm -rf ' + '\"' + tempfile_path + '\"')
         return
     
     # MODELEXT
@@ -1322,7 +1335,6 @@ def uncompress(in_offset, out_filename, size):
 
     print("\033[91mOnly FDT(DTB), BCL1, UBI, SPARSE and MODELEXT partitions is supported now, exit\033[0m")
     fin.close()
-
 
 # BCL1 header 16 bytes len:
 # "BCL1" marker
