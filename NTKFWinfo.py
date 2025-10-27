@@ -325,7 +325,7 @@ def get_args():
 def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
     uiSum = 0
     pos = 0
-    chunk_size = 10 * 1024 * 1024  # 10MB chunks
+    chunk_size = 10 * 1024 * 1024
     bytes_remaining = uiLen
     bytes_processed = 0
     
@@ -340,10 +340,14 @@ def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
             if not fread:
                 break
             
-            num_words = len(fread) // 2
-            for chunk in struct.iter_unpack('<H', fread):
-                if pos * 2 != ignoreCRCoffset:
-                    uiSum += chunk[0] + pos
+            # Zero-copy buffer, no unpacking overhead
+            words = array.array('H')
+            words.frombuffer(fread, len(fread) // 2)
+            
+            for word in words:
+                byte_pos = pos * 2
+                if byte_pos != ignoreCRCoffset:
+                    uiSum += word + pos
                 else:
                     uiSum += pos
                 pos += 1
@@ -351,7 +355,7 @@ def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
             bytes_processed += len(fread)
             bytes_remaining -= len(fread)
             progress_pct = (bytes_processed / uiLen) * 100
-            print(f"Progress: {progress_pct:.1f}% ({bytes_processed / 1024 / 1024:.1f}MB / {uiLen / 1024 / 1024:.1f}MB)")
+            print(f"Progress: {progress_pct:.1f}%")
     
     uiSum = uiSum & 0xFFFF
     uiSum = (~uiSum & 0xFFFF) + 1
