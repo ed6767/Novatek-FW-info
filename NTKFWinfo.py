@@ -326,10 +326,8 @@ def get_args():
 def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
     uiSum = 0
     chunk_size = 1024 * 1024
-
     with open(input_file, 'rb', buffering=0) as fin:
         fin.seek(in_offset)
-
         pos = 0
         bytes_remaining = uiLen
         while bytes_remaining > 0:
@@ -338,14 +336,12 @@ def MemCheck_CalcCheckSum16Bit(input_file, in_offset, uiLen, ignoreCRCoffset):
             fread = fin.read(read_size)
             if not fread:
                 break
-
-            arr = np.frombuffer(fread, dtype='<u2')
+            arr = np.frombuffer(fread, dtype='<u2').copy()  # Add .copy() here
             indices = np.arange(pos, pos + len(arr), dtype=np.uint32)
             arr[indices * 2 == ignoreCRCoffset] = 0  # zero out ignored word
             uiSum += int(np.sum(arr + indices) & 0xFFFF)
             pos += len(arr)
             bytes_remaining -= read_size
-
     uiSum &= 0xFFFF
     uiSum = (~uiSum & 0xFFFF) + 1
     return uiSum
